@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aftellen naar de uitzending</title>
+<style>body{font-family:sans-serif;text-align:center;margin:1rem}</style>
+</head>
+<body>
+<div id="countdown-container">
+  <a id="timer" href="https://logwork.com/countdown-timer" class="countdown-timer"
+     data-timezone="Europe/Amsterdam" data-language="nl" data-textcolor="#100b70">
+    De geplande uitzending begint over circa:
+  </a>
+</div>
+<p id="handmatig" hidden><a href="https://www.berkelblik.nl/rechtstreeks" target="_top">Ga naar de uitzending</a></p>
+
+<script>
+  // Enige plek waar je de datum aanpast (Nederlandse tijd, zomertijd = +02:00, wintertijd = +01:00)
+  var DATUM = "2027-04-03T11:15:00";
+  var OFFSET = "+02:00";
+  var DOEL = "https://www.berkelblik.nl/rechtstreeks";
+
+  document.getElementById("timer").setAttribute("data-date", DATUM);
+  var s = document.createElement("script");
+  s.src = "https://cdn.logwork.com/widget/countdown.js";
+  document.body.appendChild(s);
+
+  var einde = new Date(DATUM + OFFSET).getTime();
+  var teller = setInterval(function () {
+    if (Date.now() >= einde) {
+      clearInterval(teller);
+      try { window.top.location.href = DOEL; }
+      catch (e) { document.getElementById("handmatig").hidden = false; }
+    }
+  }, 1000);
+</script>
+</body>
+</html>
