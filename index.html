@@ -3,37 +3,136 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aftellen naar de uitzending</title>
-<style>body{font-family:sans-serif;text-align:center;margin:1rem}</style>
+<title>Uitzending</title>
+<style>
+  body { font-family: sans-serif; text-align: center; margin: 1rem; color: #100b70; }
+  #speler-kader { position: relative; max-width: 960px; margin: 0 auto; aspect-ratio: 16 / 9; background: #000; }
+  #speler-kader iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+  button { font-size: 1.1rem; padding: .6rem 1.2rem; margin: .8rem; cursor: pointer; }
+</style>
+<script src="https://www.youtube.com/iframe_api"></script>
 </head>
 <body>
-<div id="countdown-container">
-  <a id="timer" href="https://logwork.com/countdown-timer" class="countdown-timer"
-     data-timezone="Europe/Amsterdam" data-language="nl" data-textcolor="#100b70">
-    De geplande uitzending begint over circa:
-  </a>
+
+<div id="wacht" hidden><div id="timer-plek"></div></div>
+<div id="spelen" hidden>
+  <div id="speler-kader"></div>
+  <button id="geluid" hidden>🔊 Geluid aan</button>
 </div>
-<p id="handmatig" hidden><a href="https://www.berkelblik.nl/rechtstreeks" target="_top">Ga naar de uitzending</a></p>
+<p id="bericht">Even laden…</p>
 
 <script>
-  // Enige plek waar je de datum aanpast (Nederlandse tijd, zomertijd = +02:00, wintertijd = +01:00)
-  var DATUM = "2027-04-03T11:15:00";
-  var OFFSET = "+02:00";
-  var DOEL = "https://www.berkelblik.nl/rechtstreeks";
+// ===== INSTELLINGEN =====
+var API = 'https://script.google.com/macros/s/AKfycbwIFnItXMz0Y43-hn3RXMtN0sBmQU7IDwohN88XHX7h6DBx2_SYw-VrZ2_WBhGVTRTB/exec';   // de URL van de Apps Script-webapp (eindigt op /exec)
+var INSTAPPEN = true;                   // true: wie later binnenkomt springt naar de juiste plek; false: altijd vanaf het begin
+var AGENDA_PAGINA = 'https://www.berkelblik.nl/uitzendagenda';
 
-  document.getElementById("timer").setAttribute("data-date", DATUM);
-  var s = document.createElement("script");
-  s.src = "https://cdn.logwork.com/widget/countdown.js";
+var scheef = 0, data = null, toon = '', speler = null, getoondeStart = null, geladen = false;
+
+function nu() { return Date.now() + scheef; }   // tijd volgens de server
+
+function haalOp() {
+  fetch(API, { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      scheef = d.nu - Date.now();
+      // uitzending verplaatst terwijl de teller loopt: pagina opnieuw laden met de nieuwe tijd
+      if (toon === 'wacht' && d.gepland && getoondeStart && d.startLokaal !== getoondeStart) {
+        location.reload();
+        return;
+      }
+      data = d.gepland ? d : null;
+      geladen = true;
+      bijwerken();
+    })
+    .catch(function () { /* netwerkfout: de laatst bekende gegevens blijven gelden */ });
+}
+
+function bijwerken() {
+  if (!geladen) return;
+  if (!data) return scherm('geen');
+  var t = nu(), s = Date.parse(data.start), e = Date.parse(data.einde);
+  if (t >= e) return scherm('afgelopen');
+  if (t >= s) return scherm('spelen');
+  scherm('wacht');
+}
+
+function scherm(naam) {
+  if (naam === toon && naam !== 'spelen') return;
+  var b = document.getElementById('bericht');
+  document.getElementById('wacht').hidden = (naam !== 'wacht');
+
+  if (naam === 'wacht') {
+    bouwTeller();
+    b.textContent = '';
+  } else if (naam === 'spelen') {
+    if (data.video) { b.textContent = ''; startSpeler(); }
+    else { stopSpeler(); b.textContent = 'De uitzending begint zo meteen…'; }
+  } else if (naam === 'afgelopen') {
+    stopSpeler();
+    b.textContent = 'De uitzending is afgelopen.';
+  } else {
+    stopSpeler();
+    b.innerHTML = 'Er staat nog geen uitzending gepland. Kijk in de ' +
+      '<a href="' + AGENDA_PAGINA + '" target="_top">agenda</a> wanneer de volgende uitzending staat gepland.';
+  }
+  document.getElementById('spelen').hidden = !speler;
+  toon = naam;
+}
+
+function bouwTeller() {
+  if (getoondeStart === data.startLokaal) return;
+  if (getoondeStart !== null) { location.reload(); return; }   // de teller-widget laadt maar één keer per pagina
+  getoondeStart = data.startLokaal;
+  var a = document.createElement('a');
+  a.href = 'https://logwork.com/countdown-timer';
+  a.className = 'countdown-timer';
+  a.setAttribute('data-timezone', 'Europe/Amsterdam');
+  a.setAttribute('data-language', 'nl');
+  a.setAttribute('data-textcolor', '#100b70');
+  a.setAttribute('data-date', data.startLokaal);
+  a.textContent = 'De geplande uitzending begint over circa:';
+  document.getElementById('timer-plek').appendChild(a);
+  var s = document.createElement('script');
+  s.src = 'https://cdn.logwork.com/widget/countdown.js';
   document.body.appendChild(s);
+}
 
-  var einde = new Date(DATUM + OFFSET).getTime();
-  var teller = setInterval(function () {
-    if (Date.now() >= einde) {
-      clearInterval(teller);
-      try { window.top.location.href = DOEL; }
-      catch (e) { document.getElementById("handmatig").hidden = false; }
+function startSpeler() {
+  if (speler) return;
+  if (!window.YT || !YT.Player) return;   // YouTube-API nog niet geladen; onYouTubeIframeAPIReady probeert opnieuw
+  document.getElementById('speler-kader').innerHTML = '<div id="yt"></div>';
+  var offset = INSTAPPEN ? Math.max(0, Math.floor((nu() - Date.parse(data.start)) / 1000)) : 0;
+  speler = new YT.Player('yt', {
+    host: 'https://www.youtube-nocookie.com',
+    videoId: data.video,
+    playerVars: { autoplay: 1, mute: 1, start: offset, rel: 0, playsinline: 1 },
+    events: {
+      onReady: function (ev) {
+        ev.target.mute();
+        ev.target.playVideo();
+        document.getElementById('geluid').hidden = false;
+      }
     }
-  }, 1000);
+  });
+}
+
+function stopSpeler() {
+  if (speler) { try { speler.destroy(); } catch (e) {} speler = null; }
+  document.getElementById('speler-kader').innerHTML = '';
+  document.getElementById('geluid').hidden = true;
+}
+
+document.getElementById('geluid').onclick = function () {
+  if (speler) { speler.unMute(); speler.setVolume(100); }
+  this.hidden = true;
+};
+
+function onYouTubeIframeAPIReady() { bijwerken(); }
+
+setInterval(bijwerken, 1000);    // klok: wisselt tussen teller en speler
+setInterval(haalOp, 60000);      // agenda: elke minuut opnieuw ophalen
+haalOp();
 </script>
 </body>
 </html>
