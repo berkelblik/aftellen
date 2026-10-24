@@ -9,6 +9,10 @@
   #speler-kader { position: relative; max-width: 960px; margin: 0 auto; aspect-ratio: 16 / 9; background: #000; }
   #speler-kader iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
   button { font-size: 1.1rem; padding: .6rem 1.2rem; margin: .8rem; cursor: pointer; }
+  #bericht { font-size: 1.2rem; line-height: 1.5; }
+  .knop { display: inline-block; background: #c2276f; color: #fff; padding: .8rem 1.6rem; border-radius: 4px;
+          text-decoration: none; font-size: 1.1rem; margin-top: .8rem; }
+  #terug-info { font-size: .95rem; color: #555; }
 </style>
 <script src="https://www.youtube.com/iframe_api"></script>
 </head>
@@ -20,16 +24,23 @@
   <button id="geluid" hidden>🔊 Geluid aan</button>
 </div>
 <p id="bericht">Even laden…</p>
+<p id="terug-info"></p>
 
 <script>
 // ===== INSTELLINGEN =====
-var API = 'https://script.google.com/macros/s/AKfycbwIFnItXMz0Y43-hn3RXMtN0sBmQU7IDwohN88XHX7h6DBx2_SYw-VrZ2_WBhGVTRTB/exec';   // de URL van de Apps Script-webapp (eindigt op /exec)
+var API = 'https://script.google.com/macros/s/AKfycbwb4Y9IoFiDaIbfYn1W43Dbmu7yTHTvvDJU-FklheRXu1ckD9JnXp14uno1zZLQG_0x/exec';   // de URL van de Apps Script-webapp (eindigt op /exec)
 var INSTAPPEN = true;                   // true: wie later binnenkomt springt naar de juiste plek; false: altijd vanaf het begin
 var AGENDA_PAGINA = 'https://www.berkelblik.nl/uitzendagenda';
+var AUTO_TERUG_SEC = 20;                // na afloop automatisch terug naar de agenda na zoveel seconden (0 = uit, alleen de knop)
 
 var scheef = 0, data = null, toon = '', speler = null, getoondeStart = null, geladen = false;
+var keekMee = false, terugTimer = null, terugGestart = false;
 
 function nu() { return Date.now() + scheef; }   // tijd volgens de server
+
+function terugKnop() {
+  return '<br><a class="knop" href="' + AGENDA_PAGINA + '" target="_top">Terug naar de uitzendagenda</a>';
+}
 
 function haalOp() {
   fetch(API, { cache: 'no-store' })
@@ -62,7 +73,10 @@ function scherm(naam) {
   var b = document.getElementById('bericht');
   document.getElementById('wacht').hidden = (naam !== 'wacht');
 
+  if (naam === 'wacht' || naam === 'spelen') stopTerug();
+
   if (naam === 'wacht') {
+    keekMee = false;
     bouwTeller();
     b.textContent = '';
   } else if (naam === 'spelen') {
@@ -70,14 +84,42 @@ function scherm(naam) {
     else { stopSpeler(); b.textContent = 'De uitzending begint zo meteen…'; }
   } else if (naam === 'afgelopen') {
     stopSpeler();
-    b.textContent = 'De uitzending is afgelopen.';
+    b.innerHTML = '<strong>De uitzending is afgelopen.</strong><br>Bedankt voor het kijken!' + terugKnop();
+    startTerug();
   } else {
     stopSpeler();
-    b.innerHTML = 'Er staat nog geen uitzending gepland. Kijk in de ' +
-      '<a href="' + AGENDA_PAGINA + '" target="_top">agenda</a> wanneer de volgende uitzending staat gepland.';
+    b.innerHTML = 'Er staat nog geen uitzending gepland.<br>' +
+      'Kijk in de agenda wanneer de volgende uitzending staat gepland.' + terugKnop();
+    startTerug();
   }
   document.getElementById('spelen').hidden = !speler;
   toon = naam;
+}
+
+// Na afloop automatisch terug naar de agenda (alleen voor wie de uitzending heeft bekeken)
+function startTerug() {
+  if (!AUTO_TERUG_SEC || !keekMee || terugGestart) return;
+  terugGestart = true;
+  var rest = AUTO_TERUG_SEC, info = document.getElementById('terug-info');
+  function tik() {
+    if (rest <= 0) {
+      clearInterval(terugTimer);
+      try { window.top.location.href = AGENDA_PAGINA; } catch (e) {}
+      info.textContent = 'Gebruik de knop hierboven om terug te keren.';
+      return;
+    }
+    info.textContent = 'U wordt over ' + rest + ' seconden automatisch teruggeleid naar de uitzendagenda.';
+    rest--;
+  }
+  tik();
+  terugTimer = setInterval(tik, 1000);
+}
+
+function stopTerug() {
+  clearInterval(terugTimer);
+  terugTimer = null;
+  terugGestart = false;
+  document.getElementById('terug-info').textContent = '';
 }
 
 function bouwTeller() {
@@ -115,6 +157,7 @@ function startSpeler() {
       }
     }
   });
+  keekMee = true;
 }
 
 function stopSpeler() {
