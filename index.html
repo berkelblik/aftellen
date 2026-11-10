@@ -7,7 +7,7 @@
 <style>
   body { font-family: sans-serif; text-align: center; margin: 1rem; color: #100b70; }
   #speler-kader { position: relative; max-width: 960px; margin: 0 auto; aspect-ratio: 16 / 9; background: #000; }
-  #speler-kader iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #speler-kader iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
   button { font-size: 1.1rem; padding: .6rem 1.2rem; margin: .8rem; cursor: pointer; }
   #bericht { font-size: 1.2rem; line-height: 1.5; }
   .knop { display: inline-block; background: #c2276f; color: #fff; padding: .8rem 1.6rem; border-radius: 4px;
@@ -15,6 +15,7 @@
   #terug-info { font-size: .95rem; color: #555; }
 </style>
 <script src="https://www.youtube.com/iframe_api"></script>
+<script src="https://player.vimeo.com/api/player.js"></script>
 </head>
 <body>
 
@@ -33,7 +34,7 @@ var INSTAPPEN = true;                   // true: wie later binnenkomt springt na
 var AGENDA_PAGINA = 'https://www.berkelblik.nl/uitzendagenda';
 var AUTO_TERUG_SEC = 20;                // na afloop automatisch terug naar de agenda na zoveel seconden (0 = uit, alleen de knop)
 
-var scheef = 0, data = null, toon = '', speler = null, getoondeStart = null, geladen = false;
+var scheef = 0, data = null, toon = '', speler = null, spelerType = null, getoondeStart = null, geladen = false;
 var keekMee = false, terugTimer = null, terugGestart = false;
 
 function nu() { return Date.now() + scheef; }   // tijd volgens de server
@@ -140,11 +141,18 @@ function bouwTeller() {
   document.body.appendChild(s);
 }
 
+// Kiest de juiste speler. Zonder veld "platform" (oude webapp-versie) is het YouTube.
 function startSpeler() {
   if (speler) return;
+  var offset = INSTAPPEN ? Math.max(0, Math.floor((nu() - Date.parse(data.start)) / 1000)) : 0;
+  if (data.platform === 'vimeo') startVimeo(offset);
+  else startYouTube(offset);
+}
+
+function startYouTube(offset) {
   if (!window.YT || !YT.Player) return;   // YouTube-API nog niet geladen; onYouTubeIframeAPIReady probeert opnieuw
   document.getElementById('speler-kader').innerHTML = '<div id="yt"></div>';
-  var offset = INSTAPPEN ? Math.max(0, Math.floor((nu() - Date.parse(data.start)) / 1000)) : 0;
+  spelerType = 'youtube';
   speler = new YT.Player('yt', {
     host: 'https://www.youtube-nocookie.com',
     videoId: data.video,
@@ -160,14 +168,47 @@ function startSpeler() {
   keekMee = true;
 }
 
+function startVimeo(offset) {
+  if (!window.Vimeo || !Vimeo.Player) return;   // Vimeo-SDK nog niet geladen; de klok probeert het volgende seconde opnieuw
+  var url = 'https://player.vimeo.com/video/' + encodeURIComponent(data.video) +
+    '?autoplay=1&muted=1&playsinline=1&title=0&byline=0&portrait=0&dnt=1';
+  if (data.hash) url += '&h=' + encodeURIComponent(data.hash);   // nodig bij niet-vermelde video's
+  if (offset > 0) url += '#t=' + offset + 's';                   // instappen onderweg
+  var iframe = document.createElement('iframe');
+  iframe.src = url;
+  iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+  iframe.setAttribute('allowfullscreen', '');
+  iframe.title = 'Uitzending';
+  var kader = document.getElementById('speler-kader');
+  kader.innerHTML = '';
+  kader.appendChild(iframe);
+  spelerType = 'vimeo';
+  speler = new Vimeo.Player(iframe);
+  speler.ready().then(function () {
+    document.getElementById('geluid').hidden = false;
+  }).catch(function () {
+    document.getElementById('geluid').hidden = false;
+  });
+  keekMee = true;
+}
+
 function stopSpeler() {
-  if (speler) { try { speler.destroy(); } catch (e) {} speler = null; }
+  if (speler) {
+    try { speler.destroy(); } catch (e) {}   // werkt voor YouTube en Vimeo
+    speler = null;
+    spelerType = null;
+  }
   document.getElementById('speler-kader').innerHTML = '';
   document.getElementById('geluid').hidden = true;
 }
 
 document.getElementById('geluid').onclick = function () {
-  if (speler) { speler.unMute(); speler.setVolume(100); }
+  if (speler) {
+    try {
+      if (spelerType === 'vimeo') { speler.setMuted(false); speler.setVolume(1); }
+      else { speler.unMute(); speler.setVolume(100); }
+    } catch (e) {}
+  }
   this.hidden = true;
 };
 
