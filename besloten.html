@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Besloten produkties</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 1rem; color: #222; text-align: center; }
+  .kader { max-width: 320px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
+  input { width: 100%; box-sizing: border-box; padding: 8px; margin: 10px 0; border: 1px solid #ccc; border-radius: 3px; }
+  button { width: 100%; padding: 8px; background: #5f6c37; color: #fff; border: 0; border-radius: 3px; cursor: pointer; }
+  button:hover { background: #455027; }
+  #fout { color: #b00; font-weight: bold; min-height: 1.2em; }
+  #inhoud { max-width: 960px; margin: 0 auto; }
+  #naam { font-size: 1.8rem; font-style: italic; margin: .4rem 0 1.2rem; }
+  #links a { display: inline-block; margin: .6rem 1.5rem; font-size: 1.2rem; color: #a0105a; }
+  #speler { position: relative; aspect-ratio: 16 / 9; background: #000; margin: 1rem 0; }
+  #speler iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  #teller { font-size: 1.3rem; margin: 1rem 0; color: #100b70; }
+  #toel { white-space: pre-line; margin-top: 1.2rem; }
+</style>
+</head>
+<body>
+
+<div id="invoer" class="kader">
+  <h4>Hoe luidt het toegekende wachtwoord?</h4>
+  <form id="f">
+    <input type="password" id="code" required autocomplete="off">
+    <p id="fout"></p>
+    <button type="submit">OK</button>
+  </form>
+</div>
+
+<div id="inhoud" hidden>
+  <div id="kop"></div>
+  <div id="naam"></div>
+  <div id="teller" hidden></div>
+  <div id="speler" hidden></div>
+  <div id="links"></div>
+  <div id="toel"></div>
+</div>
+
+<script>
+// ===== INSTELLINGEN =====
+var API = 'https://script.google.com/macros/s/AKfycbwb4Y9IoFiDaIbfYn1W43Dbmu7yTHTvvDJU-FklheRXu1ckD9JnXp14uno1zZLQG_0x/exec';
+var TEKST_AUDIO = 'Dienst beluisteren (audio)';
+var TEKST_TERUGBLIK = 'Gesproken terugblik';
+var MELDING = {
+  onjuist: 'Het ingegeven wachtwoord is onjuist.',
+  verlopen: 'Deze pagina is niet meer beschikbaar. Neem contact op met de producent.',
+  druk: 'Even te veel pogingen. Probeer het over een minuut opnieuw.',
+  fout: 'Er ging iets mis. Probeer het later opnieuw.'
+};
+
+var scheef = 0, d = null, timer = null, speler = false;
+function $(id) { return document.getElementById(id); }
+function nu() { return Date.now() + scheef; }
+
+$('f').onsubmit = function (ev) {
+  ev.preventDefault();
+  var code = $('code').value.trim();
+  $('code').value = '';
+  $('fout').textContent = '';
+  fetch(API + '?code=' + encodeURIComponent(code), { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (u) {
+      if (u.ok) toon(u);
+      else $('fout').textContent = MELDING[u.reden] || MELDING.onjuist;
+    })
+    .catch(function () { $('fout').textContent = MELDING.fout; });
+};
+
+function link(tekst, url) {
+  if (!/^https?:\/\//i.test(url || '')) return;
+  var a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = tekst;
+  $('links').appendChild(a);
+}
+
+function toon(u) {
+  d = u;
+  scheef = u.nu - Date.now();
+  var datum = u.datum || '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(datum)) {
+    datum = new Date(datum + 'T12:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  $('kop').textContent = (u.aard ? 'Verslag van de ' + u.aard.toLowerCase() : 'Verslag') + (datum ? ' op ' + datum : '');
+  $('naam').textContent = u.betreft || '';
+  $('toel').textContent = u.toelichting || '';
+  link(TEKST_AUDIO, u.audio);
+  link(TEKST_TERUGBLIK, u.terugblik);
+  $('invoer').hidden = true;
+  $('inhoud').hidden = false;
+  if (u.video) { tik(); timer = setInterval(tik, 1000); }
+}
+
+function tik() {
+  var t = nu(), s = d.start ? Date.parse(d.start) : null, e = d.einde ? Date.parse(d.einde) : null;
+  if (s && t < s) {
+    var rest = Math.ceil((s - t) / 1000), h = Math.floor(rest / 3600), m = Math.floor(rest % 3600 / 60), sec = rest % 60;
+    $('teller').hidden = false;
+    $('teller').textContent = 'De uitzending begint over ' + (h ? h + ' u ' : '') + m + ' min ' + sec + ' s';
+    return;
+  }
+  $('teller').hidden = true;
+  if (speler) return;
+  speler = true;
+  clearInterval(timer);
+  var live = s && t >= s && (!e || t < e);
+  var offset = live ? Math.max(0, Math.floor((t - s) / 1000)) : 0;
+  var id = encodeURIComponent(d.video), url;
+  if (d.platform === 'vimeo') {
+    url = 'https://player.vimeo.com/video/' + id + '?dnt=1' + (d.hash ? '&h=' + encodeURIComponent(d.hash) : '') +
+      (live ? '&autoplay=1&muted=1' : '') + (offset ? '#t=' + offset + 's' : '');
+  } else {
+    url = 'https://www.youtube-nocookie.com/embed/' + id + '?rel=0' + (live ? '&autoplay=1&mute=1' : '') + (offset ? '&start=' + offset : '');
+  }
+  var f = document.createElement('iframe');
+  f.src = url; f.allow = 'autoplay; fullscreen; picture-in-picture'; f.setAttribute('allowfullscreen', ''); f.title = d.videoTitel || 'Uitzending';
+  $('speler').appendChild(f);
+  $('speler').hidden = false;
+}
+</script>
+</body>
+</html>
