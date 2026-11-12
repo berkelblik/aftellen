@@ -1,2 +1,2 @@
 # aftellen
-De externe count-down pagina die de gebruiker krijgt te zien hoelang het nog duurt voordat de volgende uitzending begint.
+De externe count-down pagina die de gebruiker krijgt te zien hoelang het nog duurt voordat de volgende uitzending begint. Daarnaast is binnen deze structuur het HTML-bestand 'Besloten.html' opgenomen. Dit bestand geeft de mogelijkheid om ten behoeve van de besloten diensten een record aan te maken met zowel audio, video en tekst toe te voegen welke  betrekking heeft op deze dienst. De vulling van deze Besloten.html bestand vindt plaats middels het Google Spreadsheet bestand (BerkelblikBeslotenProd)
