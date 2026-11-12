@@ -5,19 +5,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Besloten produkties</title>
 <style>
+  /* invoerscherm: zoals het was */
   body { font-family: Arial, sans-serif; margin: 1rem; color: #222; text-align: center; }
   .kader { max-width: 320px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
   input { width: 100%; box-sizing: border-box; padding: 8px; margin: 10px 0; border: 1px solid #ccc; border-radius: 3px; }
   button { width: 100%; padding: 8px; background: #5f6c37; color: #fff; border: 0; border-radius: 3px; cursor: pointer; }
   button:hover { background: #455027; }
+  button:disabled { background: #8a9367; cursor: wait; }
   #fout { color: #b00; font-weight: bold; min-height: 1.2em; }
-  #inhoud { max-width: 960px; margin: 0 auto; }
-  #naam { font-size: 1.8rem; font-style: italic; margin: .4rem 0 1.2rem; }
-  #links a { display: inline-block; margin: .6rem 1.5rem; font-size: 1.2rem; color: #a0105a; }
-  #speler { position: relative; aspect-ratio: 16 / 9; background: #000; margin: 1rem 0; }
+  #bezig { color: #455027; margin: .4rem 0; }
+  #zand { display: inline-block; animation: draai 1.6s steps(2, jump-none) infinite; }
+  @keyframes draai { to { transform: rotate(180deg); } }
+  @media (prefers-reduced-motion: reduce) { #zand { animation: none; } }
+  a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid #a0105a; outline-offset: 2px; }
+
+  /* verslagweergave na het invoeren van de code */
+  :root { --zacht: #6b675e; --lijn: #d9d5c9; --olijf: #5f6c37; --olijf-donker: #455027; --accent: #a0105a; }
+  #inhoud { max-width: 640px; margin: 0 auto; font-family: Georgia, "Times New Roman", serif; line-height: 1.6; color: #26241f; }
+  #kop { font-size: 1.5rem; line-height: 1.3; margin-top: .6rem; }
+  #naam { font-size: 2.3rem; line-height: 1.2; font-weight: bold; margin: .4rem 0 1.4rem; }
+  #links { display: flex; flex-wrap: wrap; gap: .8rem; justify-content: center; margin: 1.6rem 0; }
+  #links a { flex: 1 1 240px; padding: .9rem 1rem; border: 1px solid var(--olijf); border-radius: 4px; color: var(--olijf-donker); text-decoration: none; font-size: 1.1rem; }
+  #links a:hover { background: var(--olijf); color: #fff; }
+  #links a small { display: block; font-size: .85rem; opacity: .8; }
+  #teller { font-size: 1.2rem; margin: 1.2rem 0; padding: .8rem; border-top: 1px solid var(--lijn); border-bottom: 1px solid var(--lijn); color: var(--olijf-donker); }
+  #speler { position: relative; aspect-ratio: 16 / 9; background: #000; margin: 1.2rem 0; }
   #speler iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-  #teller { font-size: 1.3rem; margin: 1rem 0; color: #100b70; }
-  #toel { white-space: pre-line; margin-top: 1.2rem; }
+  #toel { white-space: pre-line; text-align: left; font-size: 1.1rem; line-height: 1.75; margin: 1.8rem auto 0; max-width: 34em; }
+  #toel:empty { display: none; }
+  #geldig { margin-top: 2.4rem; padding-top: 1rem; border-top: 1px solid var(--lijn); font-size: .85rem; color: var(--zacht); font-family: Arial, sans-serif; }
+  #geldig.snel { color: var(--accent); font-weight: bold; }
+  #geldig a { color: inherit; }
 </style>
 </head>
 <body>
@@ -26,25 +44,31 @@
   <h4>Hoe luidt het toegekende wachtwoord?</h4>
   <form id="f">
     <input type="password" id="code" required autocomplete="off">
-    <p id="fout"></p>
-    <button type="submit">OK</button>
+    <p id="fout" role="alert"></p>
+    <p id="bezig" hidden><span id="zand">&#9203;</span> Even geduld, de code wordt gecontroleerd&hellip;</p>
+    <button type="submit" id="ok">OK</button>
   </form>
 </div>
 
 <div id="inhoud" hidden>
   <div id="kop"></div>
-  <div id="naam"></div>
+  <h1 id="naam"></h1>
   <div id="teller" hidden></div>
   <div id="speler" hidden></div>
   <div id="links"></div>
   <div id="toel"></div>
+  <div id="geldig" hidden></div>
 </div>
 
 <script>
 // ===== INSTELLINGEN =====
 var API = 'https://script.google.com/macros/s/AKfycbwb4Y9IoFiDaIbfYn1W43Dbmu7yTHTvvDJU-FklheRXu1ckD9JnXp14uno1zZLQG_0x/exec';
-var TEKST_AUDIO = 'Dienst beluisteren (audio)';
+var TEKST_AUDIO = 'Dienst beluisteren';
+var SUB_AUDIO = 'Opname van de dienst';
 var TEKST_TERUGBLIK = 'Gesproken terugblik';
+var SUB_TERUGBLIK = 'Terugblik op de dienst';
+var CONTACT_MAIL = '';          // bv. 'beheer@voorbeeld.nl'; leeg = alleen de tekst "de beheerder"
+var WAARSCHUWING_DAGEN = 30;    // zoveel dagen voor het einde wordt de zichtbaarheidsregel opvallend
 var MELDING = {
   onjuist: 'Het ingegeven wachtwoord is onjuist.',
   verlopen: 'Deze pagina is niet meer beschikbaar. Neem contact op met de producent.',
@@ -55,40 +79,74 @@ var MELDING = {
 var scheef = 0, d = null, timer = null, speler = false;
 function $(id) { return document.getElementById(id); }
 function nu() { return Date.now() + scheef; }
+function lang(iso) {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function bezig(aan) {
+  $('bezig').hidden = !aan;
+  $('ok').disabled = aan;
+}
 
 $('f').onsubmit = function (ev) {
   ev.preventDefault();
+  if ($('ok').disabled) return;
   var code = $('code').value.trim();
   $('code').value = '';
   $('fout').textContent = '';
+  bezig(true);
   fetch(API + '?code=' + encodeURIComponent(code), { cache: 'no-store' })
     .then(function (r) { return r.json(); })
     .then(function (u) {
+      bezig(false);
       if (u.ok) toon(u);
       else $('fout').textContent = MELDING[u.reden] || MELDING.onjuist;
     })
-    .catch(function () { $('fout').textContent = MELDING.fout; });
+    .catch(function () { bezig(false); $('fout').textContent = MELDING.fout; });
 };
 
-function link(tekst, url) {
+// Lege code vooraf versturen: wekt het script alvast, zodat het antwoord straks sneller komt
+fetch(API + '?code=', { cache: 'no-store' }).catch(function () {});
+
+function link(tekst, sub, url) {
   if (!/^https?:\/\//i.test(url || '')) return;
   var a = document.createElement('a');
-  a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = tekst;
+  a.href = url; a.target = '_blank'; a.rel = 'noopener';
+  a.appendChild(document.createTextNode(tekst));
+  var s = document.createElement('small');
+  s.textContent = sub;
+  a.appendChild(s);
   $('links').appendChild(a);
 }
 
 function toon(u) {
   d = u;
   scheef = u.nu - Date.now();
-  var datum = u.datum || '';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(datum)) {
-    datum = new Date(datum + 'T12:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
-  }
+  var iso = /^\d{4}-\d{2}-\d{2}$/.test(u.datum || '');
+  var datum = iso ? lang(u.datum) : (u.datum || '');
   $('kop').textContent = (u.aard ? 'Verslag van de ' + u.aard.toLowerCase() : 'Verslag') + (datum ? ' op ' + datum : '');
   $('naam').textContent = u.betreft || '';
   $('toel').textContent = u.toelichting || '';
-  link(TEKST_AUDIO, u.audio);
-  link(TEKST_TERUGBLIK, u.terugblik);
+  link(TEKST_AUDIO, SUB_AUDIO, u.audio);
+  link(TEKST_TERUGBLIK, SUB_TERUGBLIK, u.terugblik);
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(u.zichtbaarTot || '')) {
+    var resterend = (Date.parse(u.zichtbaarTot + 'T23:59:59') - nu()) / 86400000;
+    var g = $('geldig');
+    g.textContent = 'Deze pagina is beschikbaar tot en met ' + lang(u.zichtbaarTot) +
+      '. Wilt u er daarna nog gebruik van maken, neem dan vóór die datum contact op met de beheerder';
+    if (CONTACT_MAIL) {
+      g.appendChild(document.createTextNode(' ('));
+      var m = document.createElement('a');
+      m.href = 'mailto:' + CONTACT_MAIL; m.textContent = CONTACT_MAIL;
+      g.appendChild(m);
+      g.appendChild(document.createTextNode(')'));
+    }
+    g.appendChild(document.createTextNode('.'));
+    if (resterend <= WAARSCHUWING_DAGEN) g.className = 'snel';
+    g.hidden = false;
+  }
+
   $('invoer').hidden = true;
   $('inhoud').hidden = false;
   if (u.video) { tik(); timer = setInterval(tik, 1000); }
