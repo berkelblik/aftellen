@@ -76,6 +76,26 @@ var MELDING = {
   fout: 'Er ging iets mis. Probeer het later opnieuw.'
 };
 
+// Teksten per soort dienst (kolom Aard). De sleutel wordt vergeleken met het begin van Aard,
+// zonder hoofdletters: 'doop' past dus ook bij 'Doopdienst'. Onbekende Aard: de standaardteksten hierboven.
+var TEKSTEN = {
+  'uitvaart': { kop: 'Verslag van de uitvaart',
+                audio: 'Dienst beluisteren', subAudio: 'Opname van de dienst',
+                terugblik: 'Gesproken terugblik', subTerugblik: 'Terugblik op de dienst' },
+  'huwelijk': { kop: 'Verslag van de huwelijksdienst',
+                audio: 'Dienst beluisteren', subAudio: 'Opname van de huwelijksdienst',
+                terugblik: 'Gesproken terugblik', subTerugblik: 'Terugblik op de huwelijksdienst' },
+  'doop':     { kop: 'Verslag van de doopdienst',
+                audio: 'Dienst beluisteren', subAudio: 'Opname van de doopdienst',
+                terugblik: 'Gesproken terugblik', subTerugblik: 'Terugblik op de doopdienst' }
+};
+function tekstenVoor(aard) {
+  var a = (aard || '').toLowerCase().trim();
+  if (!a) return null;
+  for (var k in TEKSTEN) if (a.indexOf(k) === 0) return TEKSTEN[k];
+  return null;
+}
+
 var scheef = 0, d = null, timer = null, speler = false;
 function $(id) { return document.getElementById(id); }
 function nu() { return Date.now() + scheef; }
@@ -124,11 +144,13 @@ function toon(u) {
   scheef = u.nu - Date.now();
   var iso = /^\d{4}-\d{2}-\d{2}$/.test(u.datum || '');
   var datum = iso ? lang(u.datum) : (u.datum || '');
-  $('kop').textContent = (u.aard ? 'Verslag van de ' + u.aard.toLowerCase() : 'Verslag') + (datum ? ' op ' + datum : '') + ' van';
+  var T = tekstenVoor(u.aard);
+  var kopTekst = T ? T.kop : (u.aard ? 'Verslag van de ' + u.aard.toLowerCase() : 'Verslag');
+  $('kop').textContent = kopTekst + (datum ? ' op ' + datum : '') + ' van';
   $('naam').textContent = u.betreft || '';
   $('toel').textContent = u.toelichting || '';
-  link(TEKST_AUDIO, SUB_AUDIO, u.audio);
-  link(TEKST_TERUGBLIK, SUB_TERUGBLIK, u.terugblik);
+  link(T ? T.audio : TEKST_AUDIO, T ? T.subAudio : SUB_AUDIO, u.audio);
+  link(T ? T.terugblik : TEKST_TERUGBLIK, T ? T.subTerugblik : SUB_TERUGBLIK, u.terugblik);
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(u.zichtbaarTot || '')) {
     var resterend = (Date.parse(u.zichtbaarTot + 'T23:59:59') - nu()) / 86400000;
