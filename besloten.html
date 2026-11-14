@@ -85,6 +85,12 @@ var TEKSTEN = {
   'huwelijk': { kop: 'Verslag van de huwelijksdienst',
                 audio: 'Dienst beluisteren', subAudio: 'Opname van de huwelijksdienst',
                 terugblik: 'Gesproken terugblik', subTerugblik: 'Terugblik op de huwelijksdienst' },
+  'bijeenkomst': { kop: 'Verslag van de bijeenkomst', zonderVan: true,
+                audio: 'Bijeenkomst beluisteren', subAudio: 'Opname van de bijeenkomst',
+                terugblik: 'Gesproken terugblik', subTerugblik: 'Terugblik op de bijeenkomst' },
+  'overig':   { kop: 'Verslag van de bijeenkomst', zonderVan: true,
+                audio: 'Bijeenkomst beluisteren', subAudio: 'Opname van de bijeenkomst',
+                terugblik: 'Gesproken terugblik', subTerugblik: 'Terugblik op de bijeenkomst' },
   'doop':     { kop: 'Verslag van de doopdienst',
                 audio: 'Dienst beluisteren', subAudio: 'Opname van de doopdienst',
                 terugblik: 'Gesproken terugblik', subTerugblik: 'Terugblik op de doopdienst' }
@@ -146,7 +152,7 @@ function toon(u) {
   var datum = iso ? lang(u.datum) : (u.datum || '');
   var T = tekstenVoor(u.aard);
   var kopTekst = T ? T.kop : (u.aard ? 'Verslag van de ' + u.aard.toLowerCase() : 'Verslag');
-  $('kop').textContent = kopTekst + (datum ? ' op ' + datum : '') + ' van';
+  $('kop').textContent = kopTekst + (datum ? ' op ' + datum : '') + (T && T.zonderVan ? '' : ' van');
   $('naam').textContent = u.betreft || '';
   $('toel').textContent = u.toelichting || '';
   link(T ? T.audio : TEKST_AUDIO, T ? T.subAudio : SUB_AUDIO, u.audio);
