@@ -28,6 +28,10 @@
   #links a { flex: 1 1 240px; padding: .9rem 1rem; border: 1px solid var(--olijf); border-radius: 4px; color: var(--olijf-donker); text-decoration: none; font-size: 1.1rem; }
   #links a:hover { background: var(--olijf); color: #fff; }
   #links a small { display: block; font-size: .85rem; opacity: .8; }
+  #links .audio { flex: 1 1 100%; padding: .9rem 1rem; border: 1px solid var(--olijf); border-radius: 4px; color: var(--olijf-donker); font-size: 1.1rem; }
+  #links .audio small { display: block; font-size: .85rem; opacity: .8; margin-bottom: .6rem; }
+  #links .audio audio { width: 100%; }
+  #links .audio .reserve { display: block; margin-top: .5rem; font-size: .85rem; font-family: Arial, sans-serif; color: var(--zacht); }
   #teller { font-size: 1.2rem; margin: 1.2rem 0; padding: .8rem; border-top: 1px solid var(--lijn); border-bottom: 1px solid var(--lijn); color: var(--olijf-donker); }
   #speler { position: relative; aspect-ratio: 16 / 9; background: #000; margin: 1.2rem 0; }
   #speler iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
@@ -134,8 +138,28 @@ $('f').onsubmit = function (ev) {
 // Lege code vooraf versturen: wekt het script alvast, zodat het antwoord straks sneller komt
 fetch(API + '?code=', { cache: 'no-store' }).catch(function () {});
 
-function link(tekst, sub, url) {
-  if (!/^https?:\/\//i.test(url || '')) return;
+// Maakt van een deelbaar adres een direct afspeelbaar audio-adres, of geeft null terug
+function directAudio(url) {
+  var u;
+  try { u = new URL(url); } catch (e) { return null; }
+  var host = u.hostname.toLowerCase();
+  if (host === 'dropbox.com' || host.slice(-12) === '.dropbox.com') {
+    u.searchParams.delete('dl');
+    u.searchParams.set('raw', '1');
+    return u.toString();
+  }
+  if (host === 'dl.dropboxusercontent.com') return u.toString();
+  if (host === 'drive.google.com') {
+    var m = u.pathname.match(/\/file\/d\/([^\/]+)/);
+    var id = m ? m[1] : u.searchParams.get('id');
+    if (id) return 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(id);
+    return null;
+  }
+  if (/\.(mp3|m4a|aac|wav|ogg|oga|opus)$/i.test(u.pathname)) return u.toString();
+  return null;
+}
+
+function linkKnop(tekst, sub, url) {
   var a = document.createElement('a');
   a.href = url; a.target = '_blank'; a.rel = 'noopener';
   a.appendChild(document.createTextNode(tekst));
@@ -143,6 +167,24 @@ function link(tekst, sub, url) {
   s.textContent = sub;
   a.appendChild(s);
   $('links').appendChild(a);
+}
+
+function link(tekst, sub, url) {
+  if (!/^https?:\/\//i.test(url || '')) return;
+  var bron = directAudio(url);
+  if (!bron) { linkKnop(tekst, sub, url); return; }
+  var kader = document.createElement('div');
+  kader.className = 'audio';
+  kader.appendChild(document.createTextNode(tekst));
+  var s = document.createElement('small');
+  s.textContent = sub;
+  kader.appendChild(s);
+  var p = document.createElement('audio');
+  p.controls = true; p.preload = 'metadata'; p.src = bron;
+  // lukt afspelen niet, dan terug naar de gewone knop
+  p.onerror = function () { kader.remove(); linkKnop(tekst, sub, url); };
+  kader.appendChild(p);
+  $('links').appendChild(kader);
 }
 
 function toon(u) {
